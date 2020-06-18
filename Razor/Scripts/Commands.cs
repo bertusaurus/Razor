@@ -289,6 +289,181 @@ namespace Assistant.Scripts
         }
         private static bool UseType(string command, Argument[] args, bool quiet, bool force)
         {
+            if (args.Length < 1)
+            {
+                ScriptUtilities.ScriptErrorMsg("Usage: usetype (graphic) [color] [source] [amount] [range or search level]");
+            }
+
+            string graphicString = args[0].AsString();
+            uint graphicId;
+            try
+            {
+                graphicId = args[0].AsUInt();
+            }
+            catch (RunTimeError)
+            {
+                ScriptUtilities.ScriptErrorMsg("Invalid: graphic id");
+                return true;
+            }
+
+            uint? color = null;
+            if (args.Length >= 2 && args[1].AsString().ToLower() != "any")
+            {
+                try
+                {
+                    color = args[1].AsUInt();
+                }
+                catch (RunTimeError)
+                {
+                    ScriptUtilities.ScriptErrorMsg("Invalid: color 'any' if unsure.");
+                    return true;
+                }
+            }
+
+            string sourceStr = null;
+            Serial source = 0;
+
+            if (args.Length >= 3)
+            {
+                sourceStr = args[2].AsString().ToLower();
+                if (sourceStr != "world" && sourceStr != "any" && sourceStr != "ground")
+                {
+                    try
+                    {
+                        source = args[2].AsSerial();
+                    }
+                    catch (RunTimeError)
+                    {
+                        ScriptUtilities.ScriptErrorMsg("Invalid: source id (serial).");
+                        return true;
+                    }
+                }
+            }
+
+            uint? amount = null;
+            if (args.Length >= 4 && args[3].AsString().ToLower() != "any")
+            {
+                try
+                {
+                    amount = args[3].AsUInt();
+                }
+                catch (RunTimeError)
+                {
+                    ScriptUtilities.ScriptErrorMsg("Invalid: amount 'any' if unsure.");
+                    return true;
+                }
+            }
+
+            uint? range = null;
+            if (args.Length >= 5 && args[4].AsString().ToLower() != "any")
+            {
+                try
+                {
+                    range = args[4].AsUInt();
+                }
+                catch (RunTimeError)
+                {
+                    ScriptUtilities.ScriptErrorMsg("Invalid: range 'any' or remove if unsure.");
+                    return true;
+                }
+            }
+
+            List<Serial> list = new List<Serial>();
+
+            if (args.Length < 3 || source == 0)
+            {
+                // No source provided or invalid. Treat as world.
+                foreach (Mobile find in World.MobilesInRange())
+                {
+                    if (find.Body == graphicId)
+                    {
+                        if (color.HasValue && find.Hue != color.Value)
+                        {
+                            continue;
+                        }
+
+                        // This expression does not support checking if mobiles on ground or an amount of mobiles.
+
+                        if (range.HasValue && !Utility.InRange(World.Player.Position, find.Position, (int)range.Value))
+                        {
+                            continue;
+                        }
+
+                        list.Add(find.Serial);
+                    }
+                }
+
+                if (list.Count == 0)
+                {
+                    foreach (Item i in World.Items.Values)
+                    {
+                        if (i.ItemID == graphicId && !i.IsInBank)
+                        {
+                            if (color.HasValue && i.Hue != color.Value)
+                            {
+                                continue;
+                            }
+
+                            if (sourceStr == "ground" && !i.OnGround)
+                            {
+                                continue;
+                            }
+
+                            if (i.Amount < amount)
+                            {
+                                continue;
+                            }
+
+                            if (range.HasValue && !Utility.InRange(World.Player.Position, i.Position, (int)range.Value))
+                            {
+                                continue;
+                            }
+
+                            list.Add(i.Serial);
+                        }
+                    }
+                }
+            }
+            else if (source != 0)
+            {
+                Item container = World.FindItem(source);
+                if (container != null && container.IsContainer)
+                {
+                    // TODO need an Argument.ToUShort() in interpreter as ItemId stores ushort.
+                    Item item = container.FindItemByID(new ItemID((ushort)graphicId));
+                    if (item != null &&
+                        (!color.HasValue || item.Hue == color.Value) &&
+                        (sourceStr != "ground" || item.OnGround) &&
+                        (!amount.HasValue || item.Amount >= amount) &&
+                        (!range.HasValue || Utility.InRange(World.Player.Position, item.Position, (int)range.Value)))
+                    {
+                        list.Add(item.Serial);
+                    }
+                }
+                else if (container == null)
+                {
+                    ScriptUtilities.ScriptErrorMsg($"Script Error: Couldn't find source '{sourceStr}'");
+                    return true;
+                }
+                else if (!container.IsContainer)
+                {
+                    ScriptUtilities.ScriptErrorMsg($"Script Error: Source '{sourceStr}' is not a container!");
+                    return true;
+                }
+            }
+
+            if (list.Count > 0)
+            {
+                Serial found = list[Utility.Random(list.Count)];
+                UseObject();
+            }
+
+            if (!quiet)
+            {
+                ScriptUtilities.ScriptErrorMsg($"Script Error: Couldn't find '{graphicString}'");
+            }
+
+            return 0;
             return true;
         }
 
